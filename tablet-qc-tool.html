@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Tablet QC Test Tool</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root {
+    --pass: #22c55e; --fail: #ef4444; --warn: #f59e0b; --skip: #94a3b8;
+    --bg: #f8fafc; --card: #ffffff; --text: #0f172a; --muted: #64748b;
+    --primary: #3b82f6; --primary-dark: #2563eb; --border: #e2e8f0;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; -webkit-user-select: none; user-select: none; }
+  .screen { display: none; min-height: 100vh; padding: 20px; }
+  .screen.active { display: flex; flex-direction: column; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 32px; border-radius: 12px; border: none; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-primary:active { transform: scale(0.97); }
+  .btn-outline { background: transparent; border: 2px solid var(--border); color: var(--text); }
+  .btn-pass { background: var(--pass); color: white; }
+  .btn-fail { background: var(--fail); color: white; }
+  .btn-lg { padding: 18px 48px; font-size: 18px; border-radius: 16px; }
+  .btn-sm { padding: 10px 20px; font-size: 14px; }
+
+  /* Welcome */
+  .welcome { align-items: center; justify-content: center; text-align: center; }
+  .welcome h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+  .welcome p { color: var(--muted); margin-bottom: 32px; font-size: 14px; }
+  .welcome .stats { display: flex; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; justify-content: center; }
+  .welcome .stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 20px; min-width: 80px; }
+  .welcome .stat .num { font-size: 24px; font-weight: 700; }
+  .welcome .stat .label { font-size: 11px; color: var(--muted); }
+
+  /* IMEI Screen */
+  .imei-screen { align-items: center; justify-content: center; text-align: center; padding: 24px; }
+  .imei-screen h2 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+  .imei-screen .sub { color: var(--muted); font-size: 13px; margin-bottom: 28px; }
+  .imei-methods { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 420px; }
+  .imei-method { background: var(--card); border: 2px solid var(--border); border-radius: 16px; padding: 20px; cursor: pointer; transition: all 0.2s; text-align: left; }
+  .imei-method:hover { border-color: var(--primary); }
+  .imei-method .icon { font-size: 28px; margin-bottom: 8px; }
+  .imei-method .title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  .imei-method .desc { font-size: 12px; color: var(--muted); }
+
+  .imei-input-area { width: 100%; max-width: 420px; margin-top: 24px; }
+  .imei-input-group { margin-bottom: 16px; text-align: left; }
+  .imei-input-group label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .imei-input { width: 100%; padding: 14px 16px; border: 2px solid var(--border); border-radius: 12px; font-size: 18px; font-family: 'SF Mono', 'Fira Code', monospace; letter-spacing: 2px; text-align: center; outline: none; transition: border-color 0.2s; }
+  .imei-input:focus { border-color: var(--primary); }
+  .imei-input.valid { border-color: var(--pass); }
+  .imei-input.invalid { border-color: var(--fail); }
+  .imei-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .imei-hint.error { color: var(--fail); }
+  .imei-hint.ok { color: var(--pass); }
+
+  .camera-scan-area { width: 100%; max-width: 420px; margin-top: 20px; }
+  .camera-scan-area video { width: 100%; border-radius: 12px; background: #1e293b; }
+  .scan-status { text-align: center; font-size: 13px; color: var(--muted); margin-top: 8px; }
+
+  /* Testing */
+  .testing { padding: 0; }
+  .test-header { background: var(--card); border-bottom: 1px solid var(--border); padding: 16px 20px; position: sticky; top: 0; z-index: 100; }
+  .test-header .progress-bar { height: 6px; background: #e2e8f0; border-radius: 3px; margin-bottom: 12px; overflow: hidden; }
+  .test-header .progress-fill { height: 100%; background: var(--primary); border-radius: 3px; transition: width 0.3s; }
+  .test-header .info { display: flex; justify-content: space-between; align-items: center; }
+  .test-header .category { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .test-header .counter { font-size: 13px; color: var(--muted); }
+  .test-header .test-name { font-size: 20px; font-weight: 700; margin-top: 4px; }
+  .test-body { flex: 1; padding: 20px; display: flex; flex-direction: column; }
+  .test-status-msg { text-align: center; padding: 32px 20px; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .test-status-msg .icon { font-size: 64px; margin-bottom: 16px; }
+  .test-status-msg .msg { font-size: 16px; color: var(--muted); max-width: 320px; }
+  .test-status-msg .detail { font-size: 13px; color: var(--muted); margin-top: 8px; max-width: 400px; }
+  .test-actions { padding: 20px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .spinner { width: 48px; height: 48px; border: 4px solid #e2e8f0; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Full-screen overlays */
+  .fullscreen-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9999; display: none; cursor: pointer; }
+  .fullscreen-overlay.active { display: block; }
+  .touch-grid { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9999; display: none; background: #1e293b; }
+  .touch-grid.active { display: flex; flex-wrap: wrap; }
+  .touch-cell { border: 1px solid #334155; display: flex; align-items: center; justify-content: center; transition: background 0.15s; }
+  .touch-cell.touched { background: var(--pass); }
+  .touch-grid-info { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 20px; font-size: 14px; font-weight: 600; }
+
+  /* Results */
+  .results { padding-top: 0; }
+  .results-header { text-align: center; padding: 40px 20px 24px; border-radius: 0 0 24px 24px; margin-bottom: 20px; }
+  .results-header.pass-bg { background: linear-gradient(135deg, #22c55e, #16a34a); color: white; }
+  .results-header.fail-bg { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; }
+  .results-header .big-icon { font-size: 64px; }
+  .results-header h2 { font-size: 28px; font-weight: 800; margin-top: 8px; }
+  .results-header .subtitle { opacity: 0.9; font-size: 14px; margin-top: 4px; }
+  .result-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 0 16px; margin-bottom: 20px; }
+  .result-summary .item { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px; text-align: center; }
+  .result-summary .item .n { font-size: 22px; font-weight: 700; }
+  .result-summary .item .l { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+  .result-list { padding: 0 16px; }
+  .result-cat { margin-bottom: 16px; }
+  .result-cat-title { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; padding-left: 4px; }
+  .result-item { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
+  .result-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .result-dot.pass { background: var(--pass); } .result-dot.fail { background: var(--fail); }
+  .result-dot.skip { background: var(--skip); } .result-dot.warn { background: var(--warn); }
+  .result-item .name { font-size: 14px; font-weight: 500; flex: 1; }
+  .result-item .val { font-size: 12px; color: var(--muted); text-align: right; max-width: 50%; }
+  .export-section { padding: 20px 16px 40px; display: flex; flex-direction: column; gap: 10px; }
+  .device-bar { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin: 0 16px 16px; font-size: 12px; color: var(--muted); }
+  .device-bar span { display: block; }
+  .device-bar strong { color: var(--text); }
+
+  /* QR Asset Label */
+  .asset-label-wrapper { padding: 16px; }
+  .asset-label { background: white; border: 3px solid #000; border-radius: 8px; padding: 16px; max-width: 340px; margin: 0 auto; text-align: center; }
+  .asset-label .company { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
+  .asset-label .qr-container { margin: 12px auto; display: flex; justify-content: center; }
+  .asset-label .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; text-align: left; font-size: 11px; margin-top: 12px; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+  .asset-label .info-grid .lbl { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: 9px; }
+  .asset-label .info-grid .v { font-family: 'SF Mono', monospace; font-size: 11px; font-weight: 600; }
+  .asset-label .result-badge { display: inline-block; padding: 4px 16px; border-radius: 20px; font-size: 13px; font-weight: 800; margin-top: 10px; }
+  .asset-label .result-badge.pass { background: #d1fae5; color: #065f46; }
+  .asset-label .result-badge.fail { background: #fecaca; color: #991b1b; }
+
+  @media print {
+    body * { display: none !important; }
+    .asset-label-print, .asset-label-print * { display: block !important; }
+    .asset-label-print { position: fixed; top: 0; left: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════ WELCOME ═══════ -->
+<div id="screen-welcome" class="screen welcome active">
+  <div style="font-size:48px;margin-bottom:24px">📱</div>
+  <h1>Tablet QC Tool</h1>
+  <p>Automated pre-deployment quality check.<br>~3–4 minutes per tablet.</p>
+  <div class="stats">
+    <div class="stat"><div class="num" style="color:var(--pass)">34</div><div class="label">Auto Tests</div></div>
+    <div class="stat"><div class="num" style="color:var(--warn)">19</div><div class="label">Guided</div></div>
+    <div class="stat"><div class="num">53</div><div class="label">Total</div></div>
+  </div>
+  <button class="btn btn-primary btn-lg" onclick="showScreen('imei')">▶ Start Test</button>
+  <p style="margin-top:16px;font-size:12px;color:var(--muted)">Ensure Wi-Fi is connected & SIM inserted before starting.</p>
+</div>
+
+<!-- ═══════ IMEI CAPTURE ═══════ -->
+<div id="screen-imei" class="screen imei-screen">
+  <div style="font-size:40px;margin-bottom:12px">🔍</div>
+  <h2>Capture IMEI</h2>
+  <p class="sub">Every tablet needs its IMEI recorded before testing.<br>Choose the fastest method for you.</p>
+
+  <div id="imei-method-picker" class="imei-methods">
+    <div class="imei-method" onclick="showIMEIMethod('dial')">
+      <div class="icon">📞</div>
+      <div class="title">Dial *#06#</div>
+      <div class="desc">Dial *#06# in the phone app — the IMEI will appear on screen. Then type or paste it below. <strong>Most reliable method.</strong></div>
+    </div>
+    <div class="imei-method" onclick="showIMEIMethod('scan')">
+      <div class="icon">📷</div>
+      <div class="title">Scan Barcode on Box</div>
+      <div class="desc">Use this tablet's camera to scan the IMEI barcode printed on the retail box or under the battery cover.</div>
+    </div>
+    <div class="imei-method" onclick="showIMEIMethod('manual')">
+      <div class="icon">⌨️</div>
+      <div class="title">Type Manually</div>
+      <div class="desc">Read the IMEI from Settings → About Phone → IMEI, or from the box label, and type it in.</div>
+    </div>
+  </div>
+
+  <!-- DIAL / MANUAL INPUT -->
+  <div id="imei-input-area" class="imei-input-area" style="display:none">
+    <div id="imei-dial-instructions" style="display:none; background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:16px; margin-bottom:16px; text-align:left;">
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px">📞 Step-by-step:</div>
+      <div style="font-size:13px;color:#1e40af;line-height:1.6">
+        1. Open the <strong>Phone / Dialer</strong> app on this tablet<br>
+        2. Dial <strong style="font-size:16px;letter-spacing:1px">*#06#</strong><br>
+        3. The IMEI(s) will display on screen<br>
+        4. Type or paste them below
+      </div>
+    </div>
+    <div class="imei-input-group">
+      <label>IMEI 1 (SIM Slot 1) <span style="color:var(--fail)">*</span></label>
+      <input type="text" id="imei1" class="imei-input" placeholder="000000000000000" maxlength="15" inputmode="numeric" pattern="[0-9]*" oninput="validateIMEI(this)">
+      <div class="imei-hint" id="imei1-hint">15 digits required</div>
+    </div>
+    <div class="imei-input-group">
+      <label>IMEI 2 (SIM Slot 2) — optional</label>
+      <input type="text" id="imei2" class="imei-input" placeholder="000000000000000" maxlength="15" inputmode="numeric" pattern="[0-9]*" oninput="validateIMEI(this)">
+      <div class="imei-hint" id="imei2-hint">15 digits (leave blank if single SIM)</div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px;justify-content:center">
+      <button class="btn btn-outline" onclick="backToIMEIMethods()">← Back</button>
+      <button class="btn btn-primary" id="imei-confirm-btn" onclick="confirmIMEI()" disabled>Confirm & Start Tests →</button>
+    </div>
+  </div>
+
+  <!-- CAMERA SCAN -->
+  <div id="imei-scan-area" class="camera-scan-area" style="display:none">
+    <video id="imei-scan-video" autoplay playsinline></video>
+    <div class="scan-status" id="scan-status">Point camera at the IMEI barcode on the box…</div>
+    <div style="margin-top:12px;font-size:12px;color:var(--muted)">
+      If scanning doesn't work, the barcode may not be a standard format.<br>Use the "Dial *#06#" method instead.
+    </div>
+    <div id="scan-result" style="display:none;margin-top:16px">
+      <div class="imei-input-group">
+        <label>Scanned IMEI</label>
+        <input type="text" id="imei-scanned" class="imei-input" maxlength="15" inputmode="numeric" oninput="validateIMEI(this)">
+        <div class="imei-hint" id="imei-scanned-hint"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;justify-content:center">
+      <button class="btn btn-outline" onclick="stopScan();backToIMEIMethods()">← Back</button>
+      <button class="btn btn-primary" id="scan-confirm-btn" onclick="confirmScannedIMEI()" disabled>Confirm & Start →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ TESTING ═══════ -->
+<div id="screen-testing" class="screen testing">
+  <div class="test-header">
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    <div class="info">
+      <div>
+        <div class="category" id="test-category">—</div>
+        <div class="test-name" id="test-name">—</div>
+      </div>
+      <div class="counter" id="test-counter">0/0</div>
+    </div>
+  </div>
+  <div class="test-body" id="test-body">
+    <div class="test-status-msg"><div class="spinner"></div><div class="msg">Running test…</div></div>
+  </div>
+  <div class="test-actions" id="test-actions"></div>
+</div>
+
+<!-- ═══════ RESULTS ═══════ -->
+<div id="screen-results" class="screen results"></div>
+
+<!-- ═══════ OVERLAYS ═══════ -->
+<div id="pixel-overlay" class="fullscreen-overlay"></div>
+<div id="touch-grid" class="touch-grid"></div>
+<div id="touch-grid-info" class="touch-grid-info" style="display:none"></div>
+
+<script>
+// ══════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════
+let allResults = [];
+let currentTestIdx = 0;
+let allTests = [];
+let testStartTime = null;
+let scanStream = null;
+
+const deviceInfo = {
+  userAgent: navigator.userAgent,
+  platform: navigator.platform,
+  language: navigator.language,
+  deviceMemory: navigator.deviceMemory || 'N/A',
+  cores: navigator.hardwareConcurrency || 'N/A',
+  screenW: screen.width,
+  screenH: screen.height,
+  pixelRatio: window.devicePixelRatio,
+  timestamp: new Date().toISOString(),
+  serial: 'SN-' + Math.random().toString(36).substr(2, 8).toUpperCase(),
+  imei1: '',
+  imei2: '',
+  model: 'Unknown'
+};
+
+// ══════════════════════════════════════
+//  UTILITIES
+// ══════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function record(category, name, status, value, critical) {
+  allResults.push({ category, name, status, value: String(value), critical: !!critical, time: new Date().toISOString() });
+}
+function setTestUI(cat, name, idx, total) {
+  document.getElementById('test-category').textContent = cat;
+  document.getElementById('test-name').textContent = name;
+  document.getElementById('test-counter').textContent = `${idx + 1} / ${total}`;
+  document.getElementById('progress-fill').style.width = ((idx / total) * 100) + '%';
+}
+function setStatus(icon, msg, detail) {
+  document.getElementById('test-body').innerHTML = `<div class="test-status-msg"><div class="icon">${icon}</div><div class="msg">${msg}</div>${detail ? `<div class="detail">${detail}</div>` : ''}</div>`;
+}
+function setStatusLoading(msg) {
+  document.getElementById('test-body').innerHTML = `<div class="test-status-msg"><div class="spinner"></div><div class="msg">${msg || 'Running test…'}</div></div>`;
+}
+function setActions(buttons) {
+  const el = document.getElementById('test-actions'); el.innerHTML = '';
+  buttons.forEach(b => { const btn = document.createElement('button'); btn.className = `btn ${b.cls || 'btn-primary'}`; btn.textContent = b.label; btn.onclick = b.fn; el.appendChild(btn); });
+}
+function clearActions() { document.getElementById('test-actions').innerHTML = ''; }
+
+// ══════════════════════════════════════
+//  IMEI VALIDATION (Luhn checksum)
+// ══════════════════════════════════════
+function luhnCheck(imei) {
+  if (!/^\d{15}$/.test(imei)) return false;
+  let sum = 0;
+  for (let i = 0; i < 15; i++) {
+    let d = parseInt(imei[i]);
+    if (i % 2 === 1) { d *= 2; if (d > 9) d -= 9; }
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
+
+function validateIMEI(input) {
+  const val = input.value.replace(/\D/g, '');
+  input.value = val;
+  const hintEl = document.getElementById(input.id + '-hint');
+
+  if (val.length === 0) {
+    input.className = 'imei-input';
+    if (hintEl) { hintEl.textContent = '15 digits required'; hintEl.className = 'imei-hint'; }
+  } else if (val.length < 15) {
+    input.className = 'imei-input';
+    if (hintEl) { hintEl.textContent = `${val.length}/15 digits`; hintEl.className = 'imei-hint'; }
+  } else if (val.length === 15) {
+    if (luhnCheck(val)) {
+      input.className = 'imei-input valid';
+      if (hintEl) { hintEl.textContent = '✓ Valid IMEI (Luhn check passed)'; hintEl.className = 'imei-hint ok'; }
+    } else {
+      input.className = 'imei-input invalid';
+      if (hintEl) { hintEl.textContent = '⚠ IMEI Luhn checksum failed — double-check the number'; hintEl.className = 'imei-hint error'; }
+    }
+  }
+
+  // Enable/disable confirm button
+  updateIMEIConfirmButton();
+}
+
+function updateIMEIConfirmButton() {
+  const imei1 = document.getElementById('imei1')?.value || '';
+  const btn = document.getElementById('imei-confirm-btn');
+  if (btn) btn.disabled = imei1.length !== 15;
+
+  const scanned = document.getElementById('imei-scanned')?.value || '';
+  const scanBtn = document.getElementById('scan-confirm-btn');
+  if (scanBtn) scanBtn.disabled = scanned.length !== 15;
+}
+
+// ══════════════════════════════════════
+//  IMEI CAPTURE METHODS
+// ══════════════════════════════════════
+function showIMEIMethod(method) {
+  document.getElementById('imei-method-picker').style.display = 'none';
+  document.getElementById('imei-input-area').style.display = 'none';
+  document.getElementById('imei-scan-area').style.display = 'none';
+
+  if (method === 'dial') {
+    document.getElementById('imei-input-area').style.display = 'block';
+    document.getElementById('imei-dial-instructions').style.display = 'block';
+  } else if (method === 'manual') {
+    document.getElementById('imei-input-area').style.display = 'block';
+    document.getElementById('imei-dial-instructions').style.display = 'none';
+  } else if (method === 'scan') {
+    document.getElementById('imei-scan-area').style.display = 'block';
+    startBarcodeScanner();
+  }
+}
+
+function backToIMEIMethods() {
+  document.getElementById('imei-method-picker').style.display = 'flex';
+  document.getElementById('imei-input-area').style.display = 'none';
+  document.getElementById('imei-scan-area').style.display = 'none';
+  stopScan();
+}
+
+function confirmIMEI() {
+  deviceInfo.imei1 = document.getElementById('imei1').value.trim();
+  deviceInfo.imei2 = document.getElementById('imei2').value.trim();
+  startTesting();
+}
+
+function confirmScannedIMEI() {
+  deviceInfo.imei1 = document.getElementById('imei-scanned').value.trim();
+  stopScan();
+  startTesting();
+}
+
+// ── Barcode Scanner ──
+async function startBarcodeScanner() {
+  const video = document.getElementById('imei-scan-video');
+  const statusEl = document.getElementById('scan-status');
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } });
+    video.srcObject = scanStream;
+
+    // Try BarcodeDetector API (Chrome Android 83+)
+    if ('BarcodeDetector' in window) {
+      const detector = new BarcodeDetector({ formats: ['code_128', 'code_39', 'ean_13', 'ean_8', 'itf'] });
+      statusEl.textContent = 'Scanning… Point at barcode on the box';
+
+      const scanLoop = async () => {
+        if (!scanStream) return;
+        try {
+          const barcodes = await detector.detect(video);
+          for (const bc of barcodes) {
+            const cleaned = bc.rawValue.replace(/\D/g, '');
+            if (cleaned.length === 15) {
+              document.getElementById('scan-result').style.display = 'block';
+              document.getElementById('imei-scanned').value = cleaned;
+              validateIMEI(document.getElementById('imei-scanned'));
+              statusEl.textContent = '✓ Barcode detected! Verify the IMEI below.';
+              return; // Stop scanning
+            }
+          }
+        } catch (e) {}
+        if (scanStream) requestAnimationFrame(scanLoop);
+      };
+      requestAnimationFrame(scanLoop);
+    } else {
+      statusEl.textContent = 'BarcodeDetector not available on this browser. Please use manual entry instead.';
+      document.getElementById('scan-result').style.display = 'block';
+    }
+  } catch (e) {
+    statusEl.textContent = 'Camera access denied. Use manual entry instead.';
+  }
+}
+
+function stopScan() {
+  if (scanStream) { scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
+}
+
+// ══════════════════════════════════════
+//  TEST DEFINITIONS
+// ══════════════════════════════════════
+function buildTests() {
+  return [
+    { cat: 'Display & Touchscreen', name: 'Dead Pixel Check', critical: true, run: runPixelTest },
+    { cat: 'Display & Touchscreen', name: 'Touch Grid (8×8)', critical: true, run: runTouchGrid },
+    { cat: 'Display & Touchscreen', name: 'Multi-Touch (5pt)', critical: false, run: runMultiTouch },
+    { cat: 'Display & Touchscreen', name: 'Screen Rotation', critical: true, run: runRotation },
+    { cat: 'Camera & QR', name: 'Rear Camera Feed', critical: true, run: () => runCamera('environment') },
+    { cat: 'Camera & QR', name: 'Front Camera Feed', critical: true, run: () => runCamera('user') },
+    { cat: 'Camera & QR', name: 'QR Code Scan', critical: true, run: runQRScan },
+    { cat: 'Audio', name: 'Speaker — Left Channel', critical: true, run: () => runSpeaker('left') },
+    { cat: 'Audio', name: 'Speaker — Right Channel', critical: true, run: () => runSpeaker('right') },
+    { cat: 'Audio', name: 'Microphone Recording', critical: true, run: runMicrophone },
+    { cat: 'Audio', name: 'Video Playback', critical: true, run: runVideoPlayback },
+    { cat: 'Connectivity', name: 'Internet Reachability', critical: true, run: runInternetCheck },
+    { cat: 'Connectivity', name: 'Download Speed', critical: true, run: runSpeedTest },
+    { cat: 'Connectivity', name: 'DNS Resolution', critical: true, run: runDNS },
+    { cat: 'Connectivity', name: 'HTTPS / TLS', critical: true, run: runHTTPS },
+    { cat: 'Connectivity', name: 'Network Type', critical: true, run: runNetworkType },
+    { cat: 'GPS & Location', name: 'GPS Fix', critical: true, run: runGPS },
+    { cat: 'Sensors', name: 'Accelerometer', critical: true, run: runAccelerometer },
+    { cat: 'Sensors', name: 'Gyroscope', critical: true, run: runGyroscope },
+    { cat: 'Physical Buttons', name: 'Volume Up', critical: true, run: () => runVolumeButton('up') },
+    { cat: 'Physical Buttons', name: 'Volume Down', critical: true, run: () => runVolumeButton('down') },
+    { cat: 'Battery & Charging', name: 'Battery Level', critical: true, run: runBattery },
+    { cat: 'Battery & Charging', name: 'Charging Status', critical: true, run: runCharging },
+    { cat: 'Storage & Memory', name: 'Available Storage', critical: true, run: runStorage },
+    { cat: 'Storage & Memory', name: 'RAM Check', critical: true, run: runRAM },
+    { cat: 'Storage & Memory', name: 'Storage Write Speed', critical: false, run: runStorageSpeed },
+    { cat: 'System & OS', name: 'Android Version', critical: true, run: runAndroidVersion },
+    { cat: 'System & OS', name: 'Device Info & Serial', critical: true, run: runDeviceInfo },
+    { cat: 'System & OS', name: 'System Language', critical: false, run: runLanguage },
+    { cat: 'System & OS', name: 'Clock Accuracy', critical: true, run: runClock },
+    { cat: 'System & OS', name: 'Wake Lock (Screen Stay-On)', critical: true, run: runWakeLock },
+    { cat: 'Performance', name: 'JS Benchmark', critical: false, run: runJSBenchmark },
+    { cat: 'Performance', name: 'Page Render Speed', critical: true, run: runRenderSpeed },
+  ];
+}
+
+// ══════════════════════════════════════
+//  TEST IMPLEMENTATIONS
+// ══════════════════════════════════════
+function runPixelTest() {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('pixel-overlay');
+    const colors = ['#ff0000','#00ff00','#0000ff','#ffffff','#000000'];
+    const labels = ['RED','GREEN','BLUE','WHITE','BLACK'];
+    let idx = 0;
+    overlay.style.background = colors[0];
+    overlay.classList.add('active');
+    overlay.innerHTML = `<div style="position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:white;padding:10px 24px;border-radius:20px;font-size:14px;font-weight:600;z-index:10001">Tap to cycle colors — check for dead pixels<br><span id="pixel-label">${labels[0]} (1/${colors.length})</span></div>`;
+    overlay.onclick = () => {
+      idx++;
+      if (idx < colors.length) {
+        overlay.style.background = colors[idx];
+        document.getElementById('pixel-label').textContent = `${labels[idx]} (${idx+1}/${colors.length})`;
+      } else {
+        overlay.classList.remove('active'); overlay.onclick = null;
+        setStatus('🖥️','Did you see any dead or stuck pixels?','Dead pixel = stays black. Stuck pixel = stays one color.');
+        setActions([
+          { label: '✅ No Issues', cls:'btn-pass', fn:()=>{ clearActions(); resolve({status:'pass',value:'No dead pixels'}); }},
+          { label: '❌ Found Issues', cls:'btn-fail', fn:()=>{ clearActions(); resolve({status:'fail',value:'Dead/stuck pixels found'}); }}
+        ]);
+      }
+    };
+  });
+}
+
+function runTouchGrid() {
+  return new Promise(resolve => {
+    const grid = document.getElementById('touch-grid');
+    const info = document.getElementById('touch-grid-info');
+    const cols=8, rows=8, cellW=window.innerWidth/cols, cellH=window.innerHeight/rows;
+    let touched = new Set(); const total = cols*rows;
+    grid.innerHTML = '';
+    for (let i=0; i<total; i++) {
+      const cell = document.createElement('div'); cell.className='touch-cell';
+      cell.style.width=cellW+'px'; cell.style.height=cellH+'px'; grid.appendChild(cell);
+    }
+    grid.classList.add('active'); info.style.display='block';
+    info.textContent = `Swipe across entire screen — 0/${total}`;
+    function handleTouch(e) {
+      e.preventDefault();
+      for (let t of e.touches) {
+        const idx = Math.floor(t.clientY/cellH)*cols + Math.floor(t.clientX/cellW);
+        if (idx>=0 && idx<total && !touched.has(idx)) { touched.add(idx); grid.children[idx].classList.add('touched'); info.textContent=`Swipe — ${touched.size}/${total}`; }
+      }
+      if (touched.size >= total*0.9) finish();
+    }
+    let to = setTimeout(finish, 20000);
+    function finish() {
+      clearTimeout(to); grid.removeEventListener('touchmove',handleTouch); grid.removeEventListener('touchstart',handleTouch);
+      grid.classList.remove('active'); info.style.display='none';
+      const pct = Math.round((touched.size/total)*100);
+      resolve({ status: pct>=90?'pass':'fail', value:`${pct}% zones touched (${touched.size}/${total})` });
+    }
+    grid.addEventListener('touchmove',handleTouch,{passive:false}); grid.addEventListener('touchstart',handleTouch,{passive:false});
+  });
+}
+
+function runMultiTouch() {
+  return new Promise(resolve => {
+    let maxT=0; setStatus('✋','Place 5 fingers on screen simultaneously','10 seconds'); clearActions();
+    function h(e){if(e.touches.length>maxT){maxT=e.touches.length; setStatus('✋',`Detected: ${maxT} touch points`,'Target: 5');}}
+    document.addEventListener('touchstart',h); document.addEventListener('touchmove',h);
+    setTimeout(()=>{ document.removeEventListener('touchstart',h); document.removeEventListener('touchmove',h);
+      resolve({status:maxT>=5?'pass':(maxT>=3?'warn':'fail'), value:`Max ${maxT} simultaneous touch points`});
+    },10000);
+  });
+}
+
+async function runRotation() {
+  return new Promise(resolve => {
+    if (!screen?.orientation){ resolve({status:'skip',value:'Orientation API not supported'}); return; }
+    let orients = new Set([screen.orientation.type]);
+    const h=()=>orients.add(screen.orientation.type);
+    screen.orientation.addEventListener('change',h);
+    setStatus('🔄','Rotate the tablet to landscape & back','15 seconds');
+    setTimeout(()=>{ screen.orientation.removeEventListener('change',h);
+      resolve({status:orients.size>=2?'pass':'warn', value:`${orients.size} orientations: ${[...orients].join(', ')}`});
+    },15000);
+  });
+}
+
+async function runCamera(facing) {
+  setStatusLoading(`Opening ${facing==='user'?'front':'rear'} camera…`);
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1280},height:{ideal:720}}});
+    const settings = stream.getVideoTracks()[0].getSettings();
+    document.getElementById('test-body').innerHTML = `<div style="text-align:center;padding:20px"><video id="cam-preview" autoplay playsinline style="width:100%;max-width:360px;border-radius:12px;background:#000"></video><p style="color:var(--muted);font-size:13px;margin-top:8px">Verifying feed… (3s)</p></div>`;
+    document.getElementById('cam-preview').srcObject = stream;
+    await sleep(3000);
+    const v = document.getElementById('cam-preview');
+    const c = document.createElement('canvas'); c.width=v.videoWidth||320; c.height=v.videoHeight||240;
+    const ctx=c.getContext('2d'); ctx.drawImage(v,0,0);
+    const d=ctx.getImageData(0,0,c.width,c.height); let variance=0; const step=40;
+    for(let i=0;i<d.data.length;i+=step*4) variance+=Math.abs(d.data[i]-128);
+    variance/=(d.data.length/(step*4)); stream.getTracks().forEach(t=>t.stop());
+    const res = settings.width+'x'+settings.height;
+    return { status: variance>5?'pass':'fail', value: `${facing==='user'?'Front':'Rear'} ${variance>5?'OK':'blank'} — ${res}` };
+  } catch(e){ return {status:'fail',value:e.message}; }
+}
+
+function runQRScan() {
+  return new Promise(async resolve => {
+    setStatus('📷','Point camera at any QR code','Auto-detects. 15 seconds.'); clearActions();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+      document.getElementById('test-body').innerHTML = `<div style="text-align:center;padding:20px"><video id="qr-video" autoplay playsinline style="width:100%;max-width:360px;border-radius:12px;background:#000"></video><p style="color:var(--muted);font-size:13px;margin-top:8px">Scanning…</p></div>`;
+      document.getElementById('qr-video').srcObject = stream;
+      let found = false;
+      setActions([
+        {label:'✅ QR Scanned OK',cls:'btn-pass',fn:()=>{found=true;stream.getTracks().forEach(t=>t.stop());clearActions();resolve({status:'pass',value:'QR scan confirmed'});}},
+        {label:'❌ Cannot Scan',cls:'btn-fail',fn:()=>{found=true;stream.getTracks().forEach(t=>t.stop());clearActions();resolve({status:'fail',value:'QR scan failed'});}}
+      ]);
+      setTimeout(()=>{if(!found){found=true;stream.getTracks().forEach(t=>t.stop());clearActions();resolve({status:'warn',value:'QR scan timed out'});}},15000);
+    } catch(e){ resolve({status:'fail',value:'Camera denied: '+e.message}); }
+  });
+}
+
+function runSpeaker(ch) {
+  return new Promise(resolve => {
+    try {
+      const actx=new(window.AudioContext||window.webkitAudioContext)();
+      const osc=actx.createOscillator(),gain=actx.createGain(),merger=actx.createChannelMerger(2);
+      osc.frequency.value=800; osc.type='sine'; gain.gain.value=0.5; osc.connect(gain);
+      const silence=actx.createGain(); silence.gain.value=0; osc.connect(silence);
+      if(ch==='left'){gain.connect(merger,0,0);silence.connect(merger,0,1);}
+      else{gain.connect(merger,0,1);silence.connect(merger,0,0);}
+      merger.connect(actx.destination); osc.start();
+      setStatus('🔊',`Playing tone — ${ch.toUpperCase()} speaker`,`Listen for tone from ${ch} side.`);
+      setActions([
+        {label:'✅ I Hear It',cls:'btn-pass',fn:()=>{osc.stop();actx.close();clearActions();resolve({status:'pass',value:`${ch} speaker OK`});}},
+        {label:'❌ No Sound',cls:'btn-fail',fn:()=>{osc.stop();actx.close();clearActions();resolve({status:'fail',value:`${ch} speaker silent`});}}
+      ]);
+    } catch(e){ resolve({status:'fail',value:'Audio API: '+e.message}); }
+  });
+}
+
+function runMicrophone() {
+  return new Promise(async resolve => {
+    setStatusLoading('Requesting microphone…'); clearActions();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      setStatus('🎙️','Recording… Speak or make a sound','3 seconds');
+      const rec = new MediaRecorder(stream); const chunks=[];
+      rec.ondataavailable = e=>chunks.push(e.data);
+      rec.onstop = ()=>{
+        stream.getTracks().forEach(t=>t.stop());
+        const blob=new Blob(chunks,{type:'audio/webm'}); const audio=new Audio(URL.createObjectURL(blob));
+        setStatus('🔈','Playing back recording…','Did you hear it?'); audio.play();
+        setActions([
+          {label:'✅ Heard It',cls:'btn-pass',fn:()=>{audio.pause();clearActions();resolve({status:'pass',value:'Mic OK'});}},
+          {label:'❌ Silent',cls:'btn-fail',fn:()=>{audio.pause();clearActions();resolve({status:'fail',value:'Mic silent'});}}
+        ]);
+      };
+      rec.start(); await sleep(3000); rec.stop();
+    } catch(e){ resolve({status:'fail',value:'Mic denied: '+e.message}); }
+  });
+}
+
+async function runVideoPlayback() {
+  const v=document.createElement('video');
+  const codecs=[]; if(v.canPlayType('video/mp4; codecs="avc1.42E01E"'))codecs.push('H.264'); if(v.canPlayType('video/webm; codecs="vp9"'))codecs.push('VP9');
+  return {status:codecs.length>0?'pass':'fail', value:`Codecs: ${codecs.join(', ')||'none'}`};
+}
+
+async function runInternetCheck() {
+  setStatusLoading('Checking internet…');
+  try { const s=Date.now(); const r=await fetch('https://httpbin.org/get',{cache:'no-store'}); return {status:'pass',value:`Connected — ${Date.now()-s}ms`}; }
+  catch(e){ try { await fetch('https://www.google.com/generate_204',{mode:'no-cors',cache:'no-store'}); return {status:'pass',value:'Connected (fallback)'}; } catch(e2){ return {status:'fail',value:'No internet'}; } }
+}
+
+async function runSpeedTest() {
+  setStatusLoading('Speed test…');
+  try { const s=Date.now(); const r=await fetch('https://httpbin.org/bytes/1048576',{cache:'no-store'}); const b=await r.blob(); const t=(Date.now()-s)/1000; const mbps=((b.size/1048576)*8)/t;
+    return {status:mbps>=5?'pass':(mbps>=2?'warn':'fail'), value:`${mbps.toFixed(1)} Mbps`}; }
+  catch(e){ return {status:'fail',value:'Speed test failed'}; }
+}
+
+async function runDNS() {
+  setStatusLoading('DNS test…');
+  const domains=['https://www.google.com','https://www.cloudflare.com','https://www.github.com']; let p=0;
+  for(const d of domains){ try{await fetch(d,{mode:'no-cors',cache:'no-store'});p++;}catch(e){} }
+  return {status:p===3?'pass':(p>0?'warn':'fail'), value:`${p}/3 resolved`};
+}
+
+async function runHTTPS() {
+  setStatusLoading('HTTPS test…');
+  try { await fetch('https://sha256.badssl.com/',{mode:'no-cors',cache:'no-store'}); return {status:'pass',value:'HTTPS OK'}; }
+  catch(e){ return {status:'fail',value:'HTTPS failed'}; }
+}
+
+async function runNetworkType() {
+  const c=navigator.connection||navigator.mozConnection||navigator.webkitConnection;
+  if(c) return {status:'pass',value:`Type: ${c.effectiveType||c.type||'?'}, Downlink: ${c.downlink||'?'} Mbps`};
+  return {status:'warn',value:'Network Info API unavailable'};
+}
+
+function runGPS() {
+  return new Promise(resolve => {
+    setStatusLoading('GPS fix… (30s max)');
+    if(!navigator.geolocation){resolve({status:'fail',value:'No Geolocation API'});return;}
+    const to=setTimeout(()=>resolve({status:'fail',value:'GPS timeout'}),30000);
+    navigator.geolocation.getCurrentPosition(
+      p=>{clearTimeout(to);resolve({status:p.coords.accuracy<100?'pass':'warn',value:`${p.coords.latitude.toFixed(4)},${p.coords.longitude.toFixed(4)} ±${p.coords.accuracy.toFixed(0)}m`});},
+      e=>{clearTimeout(to);resolve({status:'fail',value:'GPS: '+e.message});},
+      {enableHighAccuracy:true,timeout:28000,maximumAge:0}
+    );
+  });
+}
+
+async function runAccelerometer() {
+  setStatusLoading('Accelerometer…');
+  return new Promise(resolve => {
+    let max=0;
+    function h(e){const a=Math.sqrt((e.accelerationIncludingGravity?.x||0)**2+(e.accelerationIncludingGravity?.y||0)**2+(e.accelerationIncludingGravity?.z||0)**2);if(a>max)max=a;}
+    window.addEventListener('devicemotion',h);
+    setTimeout(()=>{window.removeEventListener('devicemotion',h);resolve({status:max>5?'pass':(max>0?'warn':'fail'),value:`Peak ${max.toFixed(1)} m/s²`});},3000);
+  });
+}
+
+async function runGyroscope() {
+  setStatusLoading('Gyroscope…');
+  return new Promise(resolve => {
+    let has=false;
+    function h(e){if(e.alpha!==null||e.beta!==null||e.gamma!==null)has=true;}
+    window.addEventListener('deviceorientation',h);
+    setTimeout(()=>{window.removeEventListener('deviceorientation',h);resolve({status:has?'pass':'fail',value:has?'Orientation data received':'No data'});},3000);
+  });
+}
+
+function runVolumeButton(dir) {
+  return new Promise(resolve => {
+    setStatus(dir==='up'?'🔊':'🔉',`Press VOLUME ${dir.toUpperCase()} button now`,'10 seconds'); clearActions();
+    let detected=false;
+    function h(e){if(e.keyCode===24||e.keyCode===25||e.key==='AudioVolumeUp'||e.key==='AudioVolumeDown'){detected=true;document.removeEventListener('keydown',h);resolve({status:'pass',value:`Volume ${dir} detected`});}}
+    document.addEventListener('keydown',h);
+    setTimeout(()=>{if(!detected){document.removeEventListener('keydown',h);
+      setStatus(dir==='up'?'🔊':'🔉',`Did volume ${dir} button work?`,'Auto-detect timed out.');
+      setActions([
+        {label:'✅ Works',cls:'btn-pass',fn:()=>{clearActions();resolve({status:'pass',value:`Volume ${dir} confirmed`});}},
+        {label:'❌ Broken',cls:'btn-fail',fn:()=>{clearActions();resolve({status:'fail',value:`Volume ${dir} broken`});}}
+      ]);
+    }},10000);
+  });
+}
+
+async function runBattery() {
+  setStatusLoading('Battery…');
+  try{const b=await navigator.getBattery();const l=Math.round(b.level*100);return{status:l>20?'pass':(l>10?'warn':'fail'),value:`${l}%`};}catch(e){return{status:'skip',value:'Battery API unavailable'};}
+}
+async function runCharging() {
+  setStatusLoading('Charging…');
+  try{const b=await navigator.getBattery();return{status:'pass',value:b.charging?`Charging (${Math.round(b.level*100)}%)`:`Not charging (${Math.round(b.level*100)}%)`};}catch(e){return{status:'skip',value:'Battery API unavailable'};}
+}
+async function runStorage() {
+  setStatusLoading('Storage…');
+  try{const e=await navigator.storage.estimate();const free=((e.quota-e.usage)/(1024**3)).toFixed(1);const total=(e.quota/(1024**3)).toFixed(1);
+    return{status:parseFloat(free)>1?'pass':'warn',value:`${free}GB free / ${total}GB total`};}catch(e){return{status:'skip',value:'Storage API unavailable'};}
+}
+async function runRAM() {
+  const m=navigator.deviceMemory; if(m)return{status:m>=3?'pass':(m>=2?'warn':'fail'),value:`${m} GB RAM`};
+  return{status:'skip',value:'deviceMemory unavailable'};
+}
+async function runStorageSpeed() {
+  setStatusLoading('Write speed…');
+  try{const d=new Uint8Array(5*1024*1024);for(let i=0;i<d.length;i++)d[i]=i%256;
+    const s=performance.now();
+    return new Promise(resolve=>{
+      const req=indexedDB.open('qc_speed',1);
+      req.onupgradeneeded=e=>e.target.result.createObjectStore('t');
+      req.onsuccess=e=>{const db=e.target.result;const tx=db.transaction('t','readwrite');tx.objectStore('t').put(d,'k');
+        tx.oncomplete=()=>{const sp=5/((performance.now()-s)/1000);db.close();indexedDB.deleteDatabase('qc_speed');
+          resolve({status:sp>=20?'pass':(sp>=10?'warn':'fail'),value:`${sp.toFixed(1)} MB/s`});};
+        tx.onerror=()=>{db.close();resolve({status:'fail',value:'Write failed'});};};
+      req.onerror=()=>resolve({status:'skip',value:'IDB unavailable'});
+    });
+  }catch(e){return{status:'fail',value:e.message};}
+}
+async function runAndroidVersion() {
+  const m=navigator.userAgent.match(/Android\s([\d.]+)/);
+  if(m){const v=parseFloat(m[1]);return{status:v>=10?'pass':(v>=8?'warn':'fail'),value:`Android ${m[1]}`};}
+  return{status:'warn',value:'Not detected in UA'};
+}
+async function runDeviceInfo() {
+  const m=navigator.userAgent.match(/;\s*([^;)]+)\s*Build/); const model=m?m[1].trim():'Unknown'; deviceInfo.model=model;
+  return{status:'pass',value:`Model: ${model} | Cores: ${deviceInfo.cores} | RAM: ${deviceInfo.deviceMemory}GB`};
+}
+async function runLanguage() { return{status:'pass',value:`${navigator.language}`}; }
+async function runClock() {
+  setStatusLoading('Clock accuracy…');
+  try{const l=Date.now();const r=await fetch('https://worldtimeapi.org/api/ip',{cache:'no-store'});const d=await r.json();
+    const drift=Math.abs(l-new Date(d.datetime).getTime())/1000;
+    return{status:drift<30?'pass':(drift<120?'warn':'fail'),value:`Drift: ${drift.toFixed(1)}s | TZ: ${d.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone}`};}
+  catch(e){return{status:'warn',value:`TZ: ${Intl.DateTimeFormat().resolvedOptions().timeZone} (accuracy unverified)`};}
+}
+async function runWakeLock() {
+  setStatusLoading('Wake lock…');
+  try{if('wakeLock' in navigator){const l=await navigator.wakeLock.request('screen');await sleep(1000);l.release();return{status:'pass',value:'Wake lock supported'};}
+    return{status:'warn',value:'Wake Lock API unavailable'};}catch(e){return{status:'warn',value:'Wake lock: '+e.message};}
+}
+async function runJSBenchmark() {
+  setStatusLoading('CPU benchmark…'); await sleep(100);
+  const s=performance.now();let ops=0;
+  while(performance.now()-s<2000){for(let i=0;i<10000;i++){Math.sqrt(Math.random()*999999);ops++;}}
+  return{status:ops>5e6?'pass':(ops>2e6?'warn':'fail'),value:`${(ops/1e6).toFixed(1)}M ops in 2s`};
+}
+async function runRenderSpeed() {
+  const entries=performance.getEntriesByType('paint');const fcp=entries.find(e=>e.name==='first-contentful-paint');
+  if(fcp)return{status:fcp.startTime<2000?'pass':(fcp.startTime<4000?'warn':'fail'),value:`FCP: ${fcp.startTime.toFixed(0)}ms`};
+  return{status:'warn',value:'Paint timing unavailable'};
+}
+
+// ══════════════════════════════════════
+//  TEST RUNNER
+// ══════════════════════════════════════
+async function startTesting() {
+  testStartTime = Date.now(); allResults = []; allTests = buildTests(); currentTestIdx = 0;
+  showScreen('testing'); await runNextTest();
+}
+async function runNextTest() {
+  if (currentTestIdx >= allTests.length) { showResults(); return; }
+  const test = allTests[currentTestIdx];
+  setTestUI(test.cat, test.name, currentTestIdx, allTests.length);
+  setStatusLoading('Preparing…'); clearActions();
+  try {
+    const result = await test.run();
+    record(test.cat, test.name, result.status, result.value, test.critical);
+    const icon = result.status==='pass'?'✅':(result.status==='fail'?'❌':(result.status==='warn'?'⚠️':'⏭️'));
+    setStatus(icon, `${test.name}: ${result.status.toUpperCase()}`, result.value); clearActions(); await sleep(800);
+  } catch(e){ record(test.cat,test.name,'fail','Error: '+e.message,test.critical); setStatus('❌',`${test.name}: ERROR`,e.message); await sleep(800); }
+  currentTestIdx++; await runNextTest();
+}
+
+// ══════════════════════════════════════
+//  RESULTS & QR ASSET LABEL
+// ══════════════════════════════════════
+function showResults() {
+  const elapsed = ((Date.now() - testStartTime) / 1000).toFixed(0);
+  const passCount = allResults.filter(r=>r.status==='pass').length;
+  const failCount = allResults.filter(r=>r.status==='fail').length;
+  const warnCount = allResults.filter(r=>r.status==='warn').length;
+  const skipCount = allResults.filter(r=>r.status==='skip').length;
+  const critFails = allResults.filter(r=>r.status==='fail'&&r.critical).length;
+  const overallPass = critFails === 0;
+
+  document.getElementById('progress-fill').style.width = '100%';
+
+  // Build QR data payload
+  const qrPayload = JSON.stringify({
+    imei1: deviceInfo.imei1,
+    imei2: deviceInfo.imei2 || null,
+    serial: deviceInfo.serial,
+    model: deviceInfo.model,
+    result: overallPass ? 'PASS' : 'FAIL',
+    tested: new Date().toISOString().slice(0,10),
+    fails: failCount,
+    critFails: critFails
+  });
+
+  const screen = document.getElementById('screen-results');
+  let html = `
+    <div class="results-header ${overallPass?'pass-bg':'fail-bg'}">
+      <div class="big-icon">${overallPass?'✅':'❌'}</div>
+      <h2>${overallPass?'ALL TESTS PASSED':`${critFails} CRITICAL FAILURE${critFails>1?'S':''}`}</h2>
+      <div class="subtitle">${allResults.length} tests in ${elapsed}s | IMEI: ${deviceInfo.imei1 || 'N/A'}</div>
+    </div>
+
+    <div class="device-bar">
+      <span><strong>IMEI 1:</strong> ${deviceInfo.imei1 || 'N/A'} &nbsp; <strong>IMEI 2:</strong> ${deviceInfo.imei2 || 'N/A'}</span>
+      <span><strong>Model:</strong> ${deviceInfo.model} &nbsp; <strong>Serial:</strong> ${deviceInfo.serial} &nbsp; <strong>RAM:</strong> ${deviceInfo.deviceMemory}GB</span>
+      <span><strong>Tested:</strong> ${new Date().toLocaleString()}</span>
+    </div>
+
+    <div class="result-summary">
+      <div class="item"><div class="n" style="color:var(--pass)">${passCount}</div><div class="l">Passed</div></div>
+      <div class="item"><div class="n" style="color:var(--fail)">${failCount}</div><div class="l">Failed</div></div>
+      <div class="item"><div class="n" style="color:var(--warn)">${warnCount}</div><div class="l">Warnings</div></div>
+      <div class="item"><div class="n" style="color:var(--skip)">${skipCount}</div><div class="l">Skipped</div></div>
+    </div>
+
+    <!-- ═══ ASSET LABEL WITH QR ═══ -->
+    <div style="padding:0 16px 16px">
+      <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;padding-left:4px">📎 Printable Asset Label</div>
+    </div>
+    <div class="asset-label-wrapper" id="asset-label-wrapper">
+      <div class="asset-label" id="asset-label">
+        <div class="company">YOUR COMPANY NAME</div>
+        <div class="qr-container" id="qr-code-container"></div>
+        <div class="info-grid">
+          <div><div class="lbl">IMEI 1</div><div class="v">${deviceInfo.imei1 || 'N/A'}</div></div>
+          <div><div class="lbl">IMEI 2</div><div class="v">${deviceInfo.imei2 || '—'}</div></div>
+          <div><div class="lbl">Model</div><div class="v">${deviceInfo.model}</div></div>
+          <div><div class="lbl">Serial</div><div class="v">${deviceInfo.serial}</div></div>
+          <div><div class="lbl">Tested</div><div class="v">${new Date().toISOString().slice(0,10)}</div></div>
+          <div><div class="lbl">QC Result</div><div class="v">${overallPass?'✓ PASS':'✗ FAIL'}</div></div>
+        </div>
+        <div class="result-badge ${overallPass?'pass':'fail'}">${overallPass?'QC PASSED':'QC FAILED'}</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:center;padding:0 16px 20px">
+      <button class="btn btn-sm btn-outline" onclick="printLabel()">🖨️ Print Label</button>
+      <button class="btn btn-sm btn-outline" onclick="downloadLabelImage()">💾 Save as Image</button>
+    </div>
+
+    <div style="padding:0 16px 8px"><div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;padding-left:4px">Test Details</div></div>
+    <div class="result-list">`;
+
+  // Group results by category
+  const cats = {};
+  allResults.forEach(r => { if (!cats[r.category]) cats[r.category] = []; cats[r.category].push(r); });
+  for (const [cat, tests] of Object.entries(cats)) {
+    html += `<div class="result-cat"><div class="result-cat-title">${cat}</div>`;
+    tests.forEach(t => { html += `<div class="result-item"><div class="result-dot ${t.status}"></div><div class="name">${t.name}${t.critical?' <span style="color:var(--fail);font-size:10px">●</span>':''}</div><div class="val">${t.value}</div></div>`; });
+    html += `</div>`;
+  }
+
+  html += `</div>
+    <div class="export-section">
+      <button class="btn btn-primary" onclick="exportJSON()">📋 Copy Results JSON</button>
+      <button class="btn btn-outline" onclick="exportCSV()">📄 Download CSV</button>
+      <button class="btn btn-outline" onclick="pushToSheet()">☁️ Push to Google Sheet</button>
+      <button class="btn btn-primary btn-lg" onclick="location.reload()" style="margin-top:16px">🔄 Test Next Tablet</button>
+    </div>`;
+
+  screen.innerHTML = html;
+  showScreen('results');
+
+  // Generate QR code
+  setTimeout(() => {
+    const container = document.getElementById('qr-code-container');
+    if (container) {
+      new QRCode(container, {
+        text: qrPayload,
+        width: 160,
+        height: 160,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    }
+  }, 100);
+}
+
+// ── Print & Download Label ──
+function printLabel() {
+  const label = document.getElementById('asset-label');
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><title>Asset Label — ${deviceInfo.imei1}</title>
+    <style>body{margin:0;display:flex;justify-content:center;padding:20px;font-family:-apple-system,sans-serif}
+    .asset-label{border:3px solid #000;border-radius:8px;padding:16px;max-width:340px;text-align:center}
+    .company{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#666;margin-bottom:8px}
+    .qr-container{margin:12px auto;display:flex;justify-content:center}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;text-align:left;font-size:11px;margin-top:12px;border-top:1px solid #e2e8f0;padding-top:10px}
+    .lbl{color:#666;font-weight:600;text-transform:uppercase;font-size:9px} .v{font-family:monospace;font-size:11px;font-weight:600}
+    .result-badge{display:inline-block;padding:4px 16px;border-radius:20px;font-size:13px;font-weight:800;margin-top:10px}
+    .result-badge.pass{background:#d1fae5;color:#065f46} .result-badge.fail{background:#fecaca;color:#991b1b}
+    @media print{@page{size:3.5in 2.5in;margin:0.1in}}</style></head><body>`);
+  win.document.write(label.outerHTML);
+  win.document.write('</body></html>');
+  win.document.close();
+  setTimeout(() => { win.print(); }, 500);
+}
+
+function downloadLabelImage() {
+  const label = document.getElementById('asset-label');
+  // Use canvas-based approach with html2canvas if available, else fallback to screenshot instruction
+  alert('To save the label as an image:\n\n1. Take a screenshot of the label above\n2. Crop to the label area\n\nOr use the Print option and "Save as PDF".');
+}
+
+// ── Export Functions ──
+function getExportData() {
+  return {
+    device: deviceInfo,
+    testDate: new Date().toISOString(),
+    totalTime: ((Date.now()-testStartTime)/1000).toFixed(0)+'s',
+    overallResult: allResults.filter(r=>r.status==='fail'&&r.critical).length===0?'PASS':'FAIL',
+    results: allResults
+  };
+}
+
+function exportJSON() {
+  const d = JSON.stringify(getExportData(), null, 2);
+  navigator.clipboard.writeText(d).then(()=>alert('Copied!')).catch(()=>prompt('Copy:',d));
+}
+
+function exportCSV() {
+  const rows = [['IMEI1','IMEI2','Model','Serial','Overall','Category','Test','Status','Value','Critical','Timestamp']];
+  allResults.forEach(r => rows.push([deviceInfo.imei1,deviceInfo.imei2||'',deviceInfo.model,deviceInfo.serial,
+    allResults.filter(x=>x.status==='fail'&&x.critical).length===0?'PASS':'FAIL',
+    r.category,r.name,r.status,r.value,r.critical?'YES':'NO',r.time]));
+  const csv = rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download = `QC_${deviceInfo.imei1||deviceInfo.serial}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+function pushToSheet() {
+  const url = prompt('Enter your Google Apps Script webhook URL:\n\n(See google-sheets-setup.js for setup instructions)',
+    'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec');
+  if(!url||url.includes('YOUR_SCRIPT_ID')){alert('No webhook configured. Use Copy JSON or Download CSV.');return;}
+  fetch(url,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(getExportData())})
+    .then(()=>alert('Results pushed!')).catch(e=>alert('Failed: '+e.message));
+}
+</script>
+</body>
+</html>
